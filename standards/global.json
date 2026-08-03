@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "rules": [
+    {"id":"html.lang","category":"document","severity":"warning","label":"HTML language declared","description":"The document should declare a language on the html element."},
+    {"id":"head.title","category":"metadata","severity":"error","label":"Document title present","description":"Exactly one non-empty title element is expected."},
+    {"id":"meta.description","category":"metadata","severity":"warning","label":"Meta description present","description":"A non-empty meta description is expected."},
+    {"id":"meta.viewport","category":"document","severity":"warning","label":"Viewport metadata present","description":"Responsive pages should declare viewport metadata."},
+    {"id":"link.canonical","category":"metadata","severity":"error","label":"Canonical URL present","description":"Exactly one canonical link is expected and should point to the audited page URL."},
+    {"id":"heading.h1","category":"structure","severity":"warning","label":"Primary H1 present","description":"Exactly one H1 is normally expected; intentional exceptions may be recorded."},
+    {"id":"ids.duplicate","category":"structure","severity":"error","label":"No duplicate element IDs","description":"Element IDs should be unique within a document."},
+    {"id":"schema.jsonld","category":"structured-data","severity":"warning","label":"JSON-LD parses","description":"Every application/ld+json block should contain valid JSON."},
+    {"id":"image.alt","category":"accessibility","severity":"warning","label":"Images have alt attributes","description":"Every img element should include an alt attribute, including empty alt for decorative images."},
+    {"id":"image.src","category":"assets","severity":"error","label":"Images have source paths","description":"Every img element should include a non-empty src attribute."},
+    {"id":"page.title-unique","category":"metadata","severity":"notice","label":"Page title is unique in scan","description":"Duplicate titles across different URLs deserve curator review."},
+    {"id":"canonical.unique","category":"metadata","severity":"error","label":"Canonical is unique in scan","description":"Different pages should not claim the same canonical URL."}
+  ]
+}
