@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "exceptions": [
+    {
+      "page": "https://oceanliners.net/",
+      "rule": "heading.h1",
+      "reason": "Homepage uses an intentionally unique layout and is not blocked by the normal single-H1 convention."
+    }
+  ]
+}
