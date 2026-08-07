@@ -3,5 +3,12 @@ main = "src/index-v1.1.js"
 compatibility_date = "2026-08-03"
 workers_dev = true
 
+[[kv_namespaces]]
+binding = "CURATOR_INTEGRITY_RECORDS"
+id = "77798f0b676c4257bdd03fc656532c3f"
+
+[triggers]
+crons = ["17 * * * *"]
+
 [observability]
 enabled = true
