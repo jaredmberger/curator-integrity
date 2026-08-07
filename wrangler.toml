@@ -1,5 +1,5 @@
 name = "curator-integrity"
-main = "src/index-v1.1.js"
+main = "src/index-v1.2.js"
 compatibility_date = "2026-08-03"
 workers_dev = true
 
