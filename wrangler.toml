@@ -1,7 +1,10 @@
 name = "curator-integrity"
-main = "src/index-v1.3.js"
+main = "src/index-v1.4.js"
 compatibility_date = "2026-08-03"
 workers_dev = true
+
+[build]
+command = "node scripts/write-build-meta.mjs"
 
 [[kv_namespaces]]
 binding = "CURATOR_INTEGRITY_RECORDS"
@@ -10,6 +13,9 @@ id = "77798f0b676c4257bdd03fc656532c3f"
 [[kv_namespaces]]
 binding = "CURATOR_ERROR_RECORDS"
 id = "447306da3a754b44830d2ac8608322c0"
+
+[version_metadata]
+binding = "CF_VERSION_METADATA"
 
 [triggers]
 crons = ["17 * * * *"]
