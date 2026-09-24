@@ -1,5 +1,6 @@
 const SITE_ORIGIN = 'https://oceanliners.net';
 const SITEMAP_URL = `${SITE_ORIGIN}/sitemap.xml`;
+const LINK_MAP_GRAPH_URL = 'https://link-map.oceanliners.net/api/graph';
 const STATE_KEY = 'integrity:state:v1';
 const LATEST_KEY = 'integrity:latest:v1';
 const HISTORY_PREFIX = 'integrity:snapshot:';
@@ -10,8 +11,9 @@ const HISTORY_LIMIT = 45;
 export async function runIntegrityMonitor(app, env, ctx) {
   if (!env.CURATOR_INTEGRITY_RECORDS) throw new Error('CURATOR_INTEGRITY_RECORDS KV binding is not configured.');
 
-  const inventory = await discoverSitePages();
-  if (!inventory.length) throw new Error('No site pages were discovered from the sitemap.');
+  const discovery = await discoverSitePages();
+  const inventory = discovery.pages;
+  if (!inventory.length) throw new Error('No site pages were discovered from the sitemap or Link Map.');
 
   const previousState = await env.CURATOR_INTEGRITY_RECORDS.get(STATE_KEY, 'json') || {};
   const previousPages = previousState.pages && typeof previousState.pages === 'object' ? previousState.pages : {};
@@ -29,7 +31,7 @@ export async function runIntegrityMonitor(app, env, ctx) {
 
   const nextCursor = (cursor + batch.length) % inventory.length;
   const cycleCompleted = nextCursor <= cursor || inventory.length <= batch.length;
-  const snapshot = summarizeSnapshot({ inventory, pages, audited, changes, now, cursor: nextCursor, cycleCompleted });
+  const snapshot = summarizeSnapshot({ inventory, pages, audited, changes, now, cursor: nextCursor, cycleCompleted, discovery: discovery.diagnostics });
   const nextState = { version: 2, inventoryCount: inventory.length, cursor: nextCursor, updatedAt: now, pages };
 
   await env.CURATOR_INTEGRITY_RECORDS.put(STATE_KEY, JSON.stringify(nextState));
@@ -47,14 +49,14 @@ export async function readIntegritySnapshot(env) {
 
 async function discoverSitePages() {
   const seenSitemaps = new Set();
-  const pages = new Set();
+  const sitemapPages = new Set();
   const queue = [SITEMAP_URL];
   while (queue.length && seenSitemaps.size < 20) {
     const sitemap = queue.shift();
     if (!sitemap || seenSitemaps.has(sitemap)) continue;
     seenSitemaps.add(sitemap);
     let response;
-    try { response = await fetch(sitemap, { headers: { accept: 'application/xml,text/xml,*/*', 'user-agent': 'Curator-Integrity-Monitor/1.0' } }); }
+    try { response = await fetch(sitemap, { headers: { accept: 'application/xml,text/xml,*/*', 'user-agent': 'Curator-Integrity-Monitor/1.1' } }); }
     catch { continue; }
     if (!response.ok) continue;
     const xml = await response.text();
@@ -65,11 +67,71 @@ async function discoverSitePages() {
         url.hash = ''; url.search = '';
         if (/\.xml$/i.test(url.pathname)) { if (!seenSitemaps.has(url.href)) queue.push(url.href); continue; }
         if (/\.(?:jpg|jpeg|png|webp|gif|svg|pdf|json|js|css|zip)$/i.test(url.pathname)) continue;
-        pages.add(logicalUrl(url.href));
+        sitemapPages.add(logicalUrl(url.href));
       } catch {}
     }
   }
-  return [...pages].sort();
+
+  const linkMap = await discoverLinkMapPages();
+  const pages = new Set([...sitemapPages, ...linkMap.pages]);
+  return {
+    pages: [...pages].sort(),
+    diagnostics: {
+      sitemapPageCount: sitemapPages.size,
+      linkMapPageCount: linkMap.pages.length,
+      unionPageCount: pages.size,
+      linkMap: {
+        ok: linkMap.ok,
+        source: LINK_MAP_GRAPH_URL,
+        generatedAt: linkMap.generatedAt,
+        freshness: linkMap.freshness,
+        stale: linkMap.stale,
+        snapshotAgeHours: linkMap.snapshotAgeHours,
+        error: linkMap.error,
+      },
+    },
+  };
+}
+
+async function discoverLinkMapPages() {
+  const empty = { ok: false, pages: [], generatedAt: null, freshness: null, stale: null, snapshotAgeHours: null, error: null };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort('timeout'), 15_000);
+  try {
+    const response = await fetch(LINK_MAP_GRAPH_URL, {
+      headers: { accept: 'application/json', 'user-agent': 'Curator-Integrity-Monitor/1.1' },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || payload?.ok === false) return { ...empty, error: payload?.error || `Link Map returned HTTP ${response.status}` };
+    const graphPages = Array.isArray(payload?.pages) ? payload.pages : Array.isArray(payload?.graph?.pages) ? payload.graph.pages : [];
+    const pages = new Set();
+    for (const row of graphPages) {
+      const raw = typeof row === 'string' ? row : row?.url;
+      if (!raw) continue;
+      try {
+        const url = new URL(raw, SITE_ORIGIN);
+        if (url.hostname.replace(/^www\./i, '') !== 'oceanliners.net') continue;
+        url.hash = ''; url.search = '';
+        if (/\.(?:jpg|jpeg|png|webp|gif|svg|pdf|xml|json|js|css|zip)$/i.test(url.pathname)) continue;
+        pages.add(logicalUrl(url.href));
+      } catch {}
+    }
+    return {
+      ok: true,
+      pages: [...pages],
+      generatedAt: payload?.generatedAt || payload?.graph?.generatedAt || null,
+      freshness: payload?.freshness || payload?.graph?.freshness || null,
+      stale: Boolean(payload?.stale ?? payload?.graph?.stale),
+      snapshotAgeHours: payload?.snapshotAgeHours ?? payload?.graph?.snapshotAgeHours ?? null,
+      error: null,
+    };
+  } catch (error) {
+    return { ...empty, error: error instanceof Error ? error.message : String(error) };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function rotatingBatch(items, start, count) { const out = []; for (let i = 0; i < count; i++) out.push(items[(start + i) % items.length]); return out; }
@@ -128,7 +190,7 @@ function compareIntegrity(previous, current) {
 function findingKey(f) { return [f.rule || '', f.severity || '', f.detail || ''].join('|'); }
 function change(type, path, title, summary, severity = null) { return { type, path, title, summary, severity, detectedAt: new Date().toISOString() }; }
 
-function summarizeSnapshot({ inventory, pages, audited, changes, now, cursor, cycleCompleted }) {
+function summarizeSnapshot({ inventory, pages, audited, changes, now, cursor, cycleCompleted, discovery }) {
   const rows = inventory.map(url => pages[toPath(url)]).filter(Boolean);
   const stale = inventory.length - rows.length;
   const problemPages = rows.filter(row => !row.ok);
@@ -144,6 +206,7 @@ function summarizeSnapshot({ inventory, pages, audited, changes, now, cursor, cy
   const counts = changes.reduce((acc, item) => (acc[item.type] = (acc[item.type] || 0) + 1, acc), {});
   return {
     ok: true, generatedAt: now, mode: 'incremental-site-monitor', inventoryCount: inventory.length, auditedPageCount: rows.length,
+    discovery: discovery || null,
     pendingInitialAuditCount: stale, problemPageCount: problemPages.length, cleanPageCount: Math.max(0, rows.length - problemPages.length), findingCount,
     severityCounts, ruleCounts, batch: { size: audited.length, nextCursor: cursor, cycleCompleted },
     freshness: { oldestCheckedAt: freshness.length ? new Date(Math.min(...freshness)).toISOString() : null, newestCheckedAt: freshness.length ? new Date(Math.max(...freshness)).toISOString() : null },
