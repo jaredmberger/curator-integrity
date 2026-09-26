@@ -15,3 +15,7 @@ It complements Site Health by answering a different question: not merely whether
 - Export findings as CSV
 
 Curator Integrity is read-only in v1. It does not modify OceanLiners.net or GitHub content.
+
+## Disaster recovery
+
+The complete primary `CURATOR_INTEGRITY_RECORDS` namespace can be exported through authenticated `GET /api/recovery-export`. Configure the Worker secret `RECOVERY_EXPORT_TOKEN`; the route remains disabled if the secret is absent. The shared `CURATOR_ERROR_RECORDS` namespace is intentionally excluded because its authoritative recovery export is owned by Error Bus. See [`RECOVERY_EXPORT.md`](RECOVERY_EXPORT.md).
