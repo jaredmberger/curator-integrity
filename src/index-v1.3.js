@@ -35,6 +35,7 @@ export default {
           component: 'scheduled-monitor',
           message: 'Scheduled Integrity monitor completed successfully.',
           maxAgeMinutes: 180,
+          recoverAfter: 2,
         });
       } catch (error) {
         await reportSystemError(env, {
@@ -43,6 +44,7 @@ export default {
           error,
           severity: 'p1',
           type: 'scheduled-monitor-error',
+          confirmAfter: 3,
         });
         console.error('Curator Integrity scheduled monitor failed', error);
       }
